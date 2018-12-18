@@ -45,11 +45,8 @@ class LatControl(object):
     self.accel_limit = 2.0                                 # Desired acceleration limit to prevent "whip steer" (resistive component)
     self.ff_angle_factor = 0.5         # Kf multiplier for angle-based feed forward
     self.ff_rate_factor = 5.0         # Kf multiplier for rate-based feed forward
-    self.ratioDelayExp = 2.0           # Exponential coefficient for variable steering ratio (delay)
-    self.ratioDelayScale = 0.0          # Multiplier for variable steering ratio (delay)
-    self.ratioScale = 200.0            # Multiplier for variable steering ratio
-    self.ratioExp = 2.8                # Exponential coefficient for variable steering assist (torque)
-    self.ratioAdjust = 0.9            # Fudge factor to preserve existing tuning parameters
+    self.ratioDelayExp = 2.0           # Exponential coefficient for variable steering rate (delay)
+    self.ratioDelayScale = 0.0          # Multiplier for variable steering rate (delay)
     self.prev_angle_rate = 0
     self.feed_forward = 0.0
     self.steerActuatorDelay = CP.steerActuatorDelay
@@ -72,8 +69,7 @@ class LatControl(object):
     self.steerpub.bind("tcp://*:8594")
     self.influxString = 'steerData3,testName=none,active=%s,ff_type=%s ff_type_a=%s,ff_type_r=%s,steer_status=%s,steer_torque_motor=%s,' \
                     'steering_control_active=%s,steer_parameter1=%s,steer_parameter2=%s,steer_parameter3=%s,steer_parameter4=%s,steer_parameter5=%s,' \
-                    'steer_parameter6=%s,steer_stock_torque=%s,steer_stock_torque_request=%s,x=%s,lateral_error=%s,y4=%s,y8=%s,y12=%s,y16=%s,y20=%s,psi=%s,' \
-                    'delta=%s,delta0=%s,delta4=%s,delta8=%s,delta12=%s,delta16=%s,delta20=%s,t=%s,' \
+                    'steer_parameter6=%s,steer_stock_torque=%s,steer_stock_torque_request=%s,x=%s,y=%s,lateral_error=%s,y0=%s,y1=%s,y2=%s,y3=%s,y4=%s,psi=%s,delta=%s,t=%s,' \
                     'curvature_factor=%s,slip_factor=%s,resonant_period=%s,accel_limit=%s,restricted_steer_rate=%s,ff_angle_factor=%s,ff_rate_factor=%s,' \
                     'pCost=%s,lCost=%s,rCost=%s,hCost=%s,srCost=%s,torque_motor=%s,driver_torque=%s,angle_rate_count=%s,angle_rate_desired=%s,' \
                     'avg_angle_rate=%s,future_angle_steers=%s,angle_rate=%s,steer_zero_crossing=%s,center_angle=%s,angle_steers=%s,angle_steers_des=%s,' \
@@ -110,9 +106,6 @@ class LatControl(object):
     if self.last_mpc_ts < PL.last_md_ts:
       self.last_mpc_ts = PL.last_md_ts
       self.angle_steers_des_prev = self.angle_steers_des_mpc
-
-      # Calculate steering torque adjustment for current steering angle.  Usually lowest value in center
-      self.ratioTorqueFactor = self.ratioAdjust + self.ratioScale * abs(angle_steers / 100.) ** self.ratioExp
 
       # Use the model's solve time instead of cur_time
       self.angle_steers_des_time = float(self.last_mpc_ts / 1000000000.0)
@@ -221,8 +214,8 @@ class LatControl(object):
       deadzone = 0.0
 
       # Use projected desired and actual angles instead of "current" values, in order to make PI more reactive (for resonance)
-      output_steer = self.ratioTorqueFactor * self.pid.update(projected_angle_steers_des, projected_angle_steers, check_saturation=(v_ego > 10),
-                                override=steer_override, feedforward=self.feed_forward, speed=v_ego, deadzone=deadzone)
+      output_steer = self.pid.update(projected_angle_steers_des, projected_angle_steers, check_saturation=(v_ego > 10), override=steer_override,
+                                     feedforward=self.feed_forward, speed=v_ego, deadzone=deadzone)
 
 
       # All but the last 3 lines after here are for real-time dashboarding
@@ -253,11 +246,8 @@ class LatControl(object):
       steer_stock_torque = 0.0
       steer_stock_torque_request = 0.0
 
-      self.steerdata += ("%d,%s,%d,%d,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%d|" % (self.isActive, \
-      ff_type, 1 if ff_type == "a" else 0, 1 if ff_type == "r" else 0, steer_status, steer_torque_motor, steering_control_active, steer_parameter1, steer_parameter2, steer_parameter3, steer_parameter4, steer_parameter5, steer_parameter6, steer_stock_torque, steer_stock_torque_request, self.cur_state[0].x, \
-      self.lateral_error, self.mpc_solution[0].y[4], self.mpc_solution[0].y[8], self.mpc_solution[0].y[12], self.mpc_solution[0].y[16], self.mpc_solution[0].y[20], \
-      self.cur_state[0].psi, self.cur_state[0].delta, self.mpc_solution[0].delta[0], self.mpc_solution[0].delta[4], self.mpc_solution[0].delta[8], self.mpc_solution[0].delta[12], self.mpc_solution[0].delta[16], self.mpc_solution[0].delta[20], \
-      self.cur_state[0].t, self.curvature_factor, self.slip_factor ,self.smooth_factor, self.accel_limit, float(restricted_steer_rate) ,self.ff_angle_factor, self.ff_rate_factor, self.pCost, self.lCost, self.rCost, self.hCost, self.srCost, steer_motor, float(driver_torque), \
+      self.steerdata += ("%d,%s,%d,%d,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%d|" % (self.isActive, \
+      ff_type, 1 if ff_type == "a" else 0, 1 if ff_type == "r" else 0, steer_status, steer_torque_motor, steering_control_active, steer_parameter1, steer_parameter2, steer_parameter3, steer_parameter4, steer_parameter5, steer_parameter6, steer_stock_torque, steer_stock_torque_request, self.cur_state[0].x, self.cur_state[0].y, self.lateral_error, self.mpc_solution[0].y[0], self.mpc_solution[0].y[1], self.mpc_solution[0].y[2], self.mpc_solution[0].y[3], self.mpc_solution[0].y[4], self.cur_state[0].psi, self.cur_state[0].delta, self.cur_state[0].t, self.curvature_factor, self.slip_factor ,self.smooth_factor, self.accel_limit, float(restricted_steer_rate) ,self.ff_angle_factor, self.ff_rate_factor, self.pCost, self.lCost, self.rCost, self.hCost, self.srCost, steer_motor, float(driver_torque), \
       self.angle_rate_count, self.angle_rate_desired, self.avg_angle_rate, projected_angle_steers, float(angle_rate), self.steer_zero_crossing, self.center_angle, angle_steers, self.angle_steers_des, angle_offset, \
       self.angle_steers_des_mpc, CP.steerRatio, CP.steerKf, CP.steerKpV[0], CP.steerKiV[0], CP.steerRateCost, PL.PP.l_prob, \
       PL.PP.r_prob, PL.PP.c_prob, PL.PP.p_prob, self.l_poly[0], self.l_poly[1], self.l_poly[2], self.l_poly[3], self.r_poly[0], self.r_poly[1], self.r_poly[2], self.r_poly[3], \
