@@ -47,9 +47,9 @@ class LatControl(object):
     self.ff_rate_factor = 5.0         # Kf multiplier for rate-based feed forward
     self.ratioDelayExp = 2.0           # Exponential coefficient for variable steering ratio (delay)
     self.ratioDelayScale = 0.0          # Multiplier for variable steering ratio (delay)
-    self.ratioScale = 200.0            # Multiplier for variable steering ratio
-    self.ratioExp = 2.8                # Exponential coefficient for variable steering assist (torque)
-    self.ratioAdjust = 0.9            # Fudge factor to preserve existing tuning parameters
+    self.ratioScale = 6.0            # Multiplier for variable steering ratio
+    self.ratioExp = 2.0                # Exponential coefficient for variable steering assist (torque)
+    self.ratioAdjust = 0.85            # Fudge factor to preserve existing tuning parameters
     self.prev_angle_rate = 0
     self.feed_forward = 0.0
     self.steerActuatorDelay = CP.steerActuatorDelay
