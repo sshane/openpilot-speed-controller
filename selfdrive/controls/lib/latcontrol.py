@@ -45,8 +45,11 @@ class LatControl(object):
     self.accel_limit = 2.0                                 # Desired acceleration limit to prevent "whip steer" (resistive component)
     self.ff_angle_factor = 0.5         # Kf multiplier for angle-based feed forward
     self.ff_rate_factor = 5.0         # Kf multiplier for rate-based feed forward
-    self.ratioDelayExp = 2.0           # Exponential coefficient for variable steering rate (delay)
-    self.ratioDelayScale = 0.0          # Multiplier for variable steering rate (delay)
+    self.ratioDelayExp = 2.0           # Exponential coefficient for variable steering ratio (delay)
+    self.ratioDelayScale = 0.0          # Multiplier for variable steering ratio (delay)
+    self.ratioScale = 6.0            # Multiplier for variable steering ratio
+    self.ratioExp = 2.0                # Exponential coefficient for variable steering assist (torque)
+    self.ratioAdjust = 0.85            # Fudge factor to preserve existing tuning parameters
     self.prev_angle_rate = 0
     self.feed_forward = 0.0
     self.steerActuatorDelay = CP.steerActuatorDelay
