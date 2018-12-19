@@ -250,11 +250,12 @@ class CarState(object):
 
     self.angle_steers_rate = cp.vl["STEERING_SENSORS"]['STEER_ANGLE_RATE']
     self.steer_rack = cp.vl["NEW_MSG_1"]["NEW_SIGNAL_1"]
+    '''
     if self.steer_rack != 0:
       print(int(self.angle_steers), int(self.steer_rack), self.angle_steers / self.steer_rack )
     else:
       print(int(self.angle_steers), int(self.steer_rack))
-
+    '''
     self.cruise_setting = cp.vl["SCM_BUTTONS"]['CRUISE_SETTING']
     self.cruise_buttons = cp.vl["SCM_BUTTONS"]['CRUISE_BUTTONS']
 

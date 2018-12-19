@@ -26,11 +26,11 @@ class PathPlanner(object):
 
       try:
         if LaC is not None and LaC.angle_steers_des_mpc != 0.0:
-          angle_error = 0.0  # LaC.angle_steers_des_mpc - (0.05 * LaC.avg_angle_steers + LaC.steerActuatorDelay * LaC.projected_angle_steers) / (LaC.steerActuatorDelay + 0.05)
+          angle_error = LaC.angle_steers_des_mpc - (0.05 * LaC.avg_angle_steers + LaC.steerActuatorDelay * LaC.projected_angle_steers) / (LaC.steerActuatorDelay + 0.05)
         else:
           angle_error = 0.0
         if angle_error != 0.0:
-          LaC.lateral_error = 2.0 * np.clip(v_ego * (LaC.steerActuatorDelay + 0.05) * math.tan(math.radians(angle_error / LaC.cur_steer_ratio)), -1.2, 1.2)
+          LaC.lateral_error = 4.0 * np.clip(v_ego * (LaC.steerActuatorDelay + 0.05) * math.tan(math.radians(angle_error)), -1.2, 1.2)
           lateral_error = LaC.lateral_error
         else:
           lateral_error = 0.0
