@@ -102,6 +102,10 @@ class LatControl(object):
   def update(self, active, v_ego, angle_steers, angle_rate, steer_override, d_poly, angle_offset, CP, VM, PL):
     cur_time = sec_since_boot()
     self.mpc_updated = False
+
+    # Use steering rate from the last 2 samples to estimate acceleration for a more realistic future steering rate
+    accelerated_angle_rate = 2.0 * angle_rate - self.prev_angle_rate
+
     # TODO: this creates issues in replay when rewinding time: mpc won't run
     if self.last_mpc_ts < PL.last_md_ts:
       self.last_mpc_ts = PL.last_md_ts
@@ -117,9 +121,6 @@ class LatControl(object):
       # Determine a proper delay time that includes the model's processing time, which is variable
       plan_age = _DT_MPC + cur_time - float(self.last_mpc_ts / 1000000000.0)
       total_delay = ratioDelayFactor * CP.steerActuatorDelay + plan_age
-
-      # Use steering rate from the last 2 samples to estimate acceleration for a more realistic future steering rate
-      accelerated_angle_rate = 2.0 * angle_rate - self.prev_angle_rate
 
       # Project the future steering angle for the actuator delay only (not model delay)
       self.projected_angle_steers = ratioDelayFactor * CP.steerActuatorDelay * accelerated_angle_rate + angle_steers
@@ -187,13 +188,13 @@ class LatControl(object):
 
       # Determine the target steer rate for desired angle, but prevent the acceleration limit from being exceeded
       # Restricting the steer rate creates the resistive component needed for resonance
-      restricted_steer_rate = np.clip(self.angle_steers_des - float(angle_steers) , float(angle_rate) - self.accel_limit, float(angle_rate) + self.accel_limit)
+      restricted_steer_rate = np.clip(self.angle_steers_des - float(angle_steers) , float(accelerated_angle_rate) - self.accel_limit, float(accelerated_angle_rate) + self.accel_limit)
 
       # Determine projected desired angle that is within the acceleration limit (prevent the steering wheel from jerking)
       projected_angle_steers_des = self.angle_steers_des + self.projection_factor * restricted_steer_rate
 
       # Determine project angle steers using current steer rate
-      projected_angle_steers = float(angle_steers) + self.projection_factor * float(angle_rate)
+      projected_angle_steers = float(angle_steers) + self.projection_factor * float(accelerated_angle_rate)
 
       steers_max = get_steer_max(CP, v_ego)
       self.pid.pos_limit = steers_max
@@ -203,7 +204,7 @@ class LatControl(object):
         # Decide which feed forward mode should be used (angle or rate).  Use more dominant mode, and only if conditions are met
         # Spread feed forward out over a period of time to make it more inductive (for resonance)
         if abs(self.ff_rate_factor * float(restricted_steer_rate)) > abs(self.ff_angle_factor * float(self.angle_steers_des) - float(angle_offset)) - 0.5 \
-            and (abs(float(restricted_steer_rate)) > abs(angle_rate) or (float(restricted_steer_rate) < 0) != (angle_rate < 0)) \
+            and (abs(float(restricted_steer_rate)) > abs(accelerated_angle_rate) or (float(restricted_steer_rate) < 0) != (accelerated_angle_rate < 0)) \
             and (float(restricted_steer_rate) < 0) == (float(self.angle_steers_des) - float(angle_offset) - 0.5 < 0):
           ff_type = "r"
           self.feed_forward = (((self.smooth_factor - 1.) * self.feed_forward) + self.ff_rate_factor * v_ego**2 * float(restricted_steer_rate)) / self.smooth_factor
@@ -229,7 +230,7 @@ class LatControl(object):
       steer_stock_torque = 0.0
       steer_stock_torque_request = 0.0
 
-      if self.mpc_updated:
+      if True == True or self.mpc_updated:
         self.steerdata += ("%d,%s,%d,%d,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%d|" % (self.isActive, \
         ff_type, 1 if ff_type == "a" else 0, 1 if ff_type == "r" else 0, steer_status, steering_control_active, steer_stock_torque, steer_stock_torque_request, \
         self.mpc_solution[0].delta[0], self.mpc_solution[0].delta[1], self.mpc_solution[0].delta[2], self.mpc_solution[0].delta[3], self.mpc_solution[0].delta[4], \
