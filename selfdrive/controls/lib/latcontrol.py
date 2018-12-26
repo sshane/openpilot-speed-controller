@@ -84,6 +84,7 @@ class LatControl(object):
     self.curvature_factor = 0.0
     self.slip_factor = 0.0
     self.isActive = 0
+    self.mpc_frame = 0
 
   def setup_mpc(self, steer_rate_cost):
     self.libmpc = libmpc_py.libmpc
@@ -93,6 +94,9 @@ class LatControl(object):
     self.mpc_average = libmpc_py.ffi.new("log_t *")
     self.mpc_average_initialized = False
     self.cur_state = libmpc_py.ffi.new("state_t *")
+    self.mpc_angles = [0.0, 0.0, 0.0]
+    self.mpc_rates = [0.0, 0.0, 0.0]
+    self.mpc_times = [0.0, 0.0, 0.0]
     self.mpc_updated = False
     self.mpc_nans = False
     self.cur_state[0].x = 0.0
@@ -116,18 +120,12 @@ class LatControl(object):
     # TODO: this creates issues in replay when rewinding time: mpc won't run
     if self.last_mpc_ts < PL.last_md_ts:
       self.last_mpc_ts = PL.last_md_ts
-      self.angle_steers_des_prev = self.angle_steers_des_mpc
 
-      # Use the model's solve time instead of cur_time
-      self.angle_steers_des_time = float(self.last_mpc_ts / 1000000000.0)
       self.curvature_factor = VM.curvature_factor(v_ego)
-
-      # This is currently disabled, but it is used to compensate for variable steering rate
-      ratioDelayFactor = 1. + self.ratioDelayScale * abs(angle_steers / 100.) ** self.ratioDelayExp
 
       # Determine a proper delay time that includes the model's processing time, which is variable
       plan_age = _DT_MPC + cur_time - float(self.last_mpc_ts / 1000000000.0)
-      total_delay = ratioDelayFactor * CP.steerActuatorDelay + plan_age
+      total_delay = CP.steerActuatorDelay + plan_age
 
       self.l_poly = libmpc_py.ffi.new("double[4]", list(PL.PP.l_poly))
       self.r_poly = libmpc_py.ffi.new("double[4]", list(PL.PP.r_poly))
@@ -152,27 +150,36 @@ class LatControl(object):
       # reset to current steer angle if not active or overriding
       if active:
         self.isActive = 1
-        delta_desired = self.mpc_solution[0].delta[1]
-        #delta_desired = (self.mpc_solution[0].delta[1] + self.mpc_solution[0].delta[1]) / 2.0
+        self.cur_state[0].delta = self.mpc_solution[0].delta[1]
         if self.cur_state[0].delta != 0.0:
           ratio = math.radians(angle_steers - angle_offset) / self.cur_state[0].delta
           if ratio > 0:
             self.observed_ratio = (9.0 * self.observed_ratio + ratio) / 10.0
       else:
         self.isActive = 0
-        delta_desired = math.radians(angle_steers - angle_offset) / CP.steerRatio
 
-      self.cur_state[0].delta = delta_desired
+      self.mpc_angles[0] = self.angle_steers_des
+      self.mpc_angles[1] = float(math.degrees(self.mpc_solution[0].delta[1] * CP.steerRatio) + angle_offset)
+      #self.mpc_angles[2] = self.mpc_angles[1] # float(math.degrees(self.mpc_solution[0].delta[2] * CP.steerRatio) + angle_offset) + self.mpc_angles[1]
+      self.mpc_angles[2] = float(math.degrees(self.mpc_solution[0].delta[2] * CP.steerRatio) + angle_offset) #- self.mpc_angles[1]
 
-      self.angle_steers_des_mpc = float(math.degrees(delta_desired * CP.steerRatio) + angle_offset)
+      self.mpc_times[0] = self.angle_steers_des_time
+      self.mpc_times[1] = float(self.last_mpc_ts / 1000000000.0) + _DT_MPC
+      self.mpc_times[2] = self.mpc_times[1] + _DT_MPC
 
-      # Use last 2 desired angles to determine the model's desired steer rate
-      self.angle_rate_desired = (self.angle_steers_des_mpc - self.angle_steers_des_prev) / _DT_MPC
+      #print (self.mpc_times, self.mpc_angles)
+      if self.mpc_times[0] > self.mpc_times[1]:
+        print("delayed")
+        self.mpc_angles[1] = self.angle_steers_des
+        self.mpc_times[1] = self.angle_steers_des_time
+
+      self.angle_steers_des_mpc = self.mpc_angles[1]
       self.mpc_updated = True
 
       #  Check for infeasable MPC solution
       self.mpc_nans = np.any(np.isnan(list(self.mpc_solution[0].delta)))
-      t = sec_since_boot()
+      cur_time = sec_since_boot()
+      t = cur_time
       if self.mpc_nans:
         self.libmpc.init(MPC_COST_LAT.PATH, MPC_COST_LAT.LANE, MPC_COST_LAT.HEADING, CP.steerRateCost)
         self.cur_state[0].delta = math.radians(angle_steers) / CP.steerRatio
@@ -194,11 +201,14 @@ class LatControl(object):
       projected_angle_steers_des = 0.0
       projected_angle_steers = 0.0
       restricted_steer_rate = 0.0
+      self.angle_steers_des = angle_steers
+      self.avg_angle_steers = angle_steers
       self.mpc_average = libmpc_py.ffi.new("log_t *")
       self.mpc_average_initialized = False
     else:
       # Interpolate desired angle between MPC updates
-      self.angle_steers_des = self.angle_steers_des_prev + self.angle_rate_desired * (cur_time - self.angle_steers_des_time)
+      self.angle_steers_des = np.interp(cur_time, self.mpc_times, self.mpc_angles)
+      #print(self.angle_steers_des)
       self.avg_angle_steers = (4.0 * self.avg_angle_steers + angle_steers) / 5.0
 
       # Determine the target steer rate for desired angle, but prevent the acceleration limit from being exceeded
@@ -246,17 +256,22 @@ class LatControl(object):
       steer_stock_torque = 0.0
       steer_stock_torque_request = 0.0
 
-      if True == False or self.mpc_updated:
+      if self.mpc_updated:
+        self.mpc_frame = self.mpc_frame + 1 if self.mpc_frame < 20 else 0
+
+      if True == True or self.mpc_updated:
+        #print (self.mpc_solution[0].t[0], self.mpc_solution[0].t[1], cur_time)
+        n = self.mpc_frame
         self.steerdata += ("%d,%s,%d,%d,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%d|" % (self.isActive, \
         ff_type, 1 if ff_type == "a" else 0, 1 if ff_type == "r" else 0, steer_status, steering_control_active, steer_stock_torque, steer_stock_torque_request, \
-        self.mpc_solution[0].delta[0], self.mpc_solution[0].delta[1], self.mpc_solution[0].delta[2], self.mpc_solution[0].delta[3], self.mpc_solution[0].delta[4], \
-        self.mpc_solution[0].delta[5], self.mpc_solution[0].delta[6], self.mpc_solution[0].delta[7], self.mpc_solution[0].delta[8], self.mpc_solution[0].delta[9], \
-        self.mpc_solution[0].delta[10], self.mpc_solution[0].delta[11], self.mpc_solution[0].delta[12], self.mpc_solution[0].delta[13], self.mpc_solution[0].delta[14], \
-        self.mpc_solution[0].delta[15], self.mpc_solution[0].delta[16], self.mpc_solution[0].delta[17], self.mpc_solution[0].delta[18], self.mpc_solution[0].delta[19], self.mpc_solution[0].delta[20], \
-        self.mpc_average[0].delta[0], self.mpc_average[0].delta[1], self.mpc_average[0].delta[2], self.mpc_average[0].delta[3], self.mpc_average[0].delta[4], \
-        self.mpc_average[0].delta[5], self.mpc_average[0].delta[6], self.mpc_average[0].delta[7], self.mpc_average[0].delta[8], self.mpc_average[0].delta[9], \
-        self.mpc_average[0].delta[10], self.mpc_average[0].delta[11], self.mpc_average[0].delta[12], self.mpc_average[0].delta[13], self.mpc_average[0].delta[14], \
-        self.mpc_average[0].delta[15], self.mpc_average[0].delta[16], self.mpc_average[0].delta[17], self.mpc_average[0].delta[18], self.mpc_average[0].delta[19], self.mpc_average[0].delta[20], \
+        self.mpc_solution[0].delta[(n + 0) % 21], self.mpc_solution[0].delta[(n + 1) % 21], self.mpc_solution[0].delta[(n + 2) % 21], self.mpc_solution[0].delta[(n + 3) % 21], self.mpc_solution[0].delta[(n + 4) % 21], \
+        self.mpc_solution[0].delta[(n + 5) % 21], self.mpc_solution[0].delta[(n + 6) % 21], self.mpc_solution[0].delta[(n + 7) % 21], self.mpc_solution[0].delta[(n + 8) % 21], self.mpc_solution[0].delta[(n + 9) % 21], \
+        self.mpc_solution[0].delta[(n + 10) % 21], self.mpc_solution[0].delta[(n + 11) % 21], self.mpc_solution[0].delta[(n + 12) % 21], self.mpc_solution[0].delta[(n + 13) % 21], self.mpc_solution[0].delta[(n + 14) % 21], \
+        self.mpc_solution[0].delta[(n + 15) % 21], self.mpc_solution[0].delta[(n + 16) % 21], self.mpc_solution[0].delta[(n + 17) % 21], self.mpc_solution[0].delta[(n + 18) % 21], self.mpc_solution[0].delta[(n + 19) % 21], self.mpc_solution[0].delta[(n + 20) % 21], \
+        self.mpc_average[0].delta[(n + 0) % 21], self.mpc_average[0].delta[(n + 1) % 21], self.mpc_average[0].delta[(n + 2) % 21], self.mpc_average[0].delta[(n + 3) % 21], self.mpc_average[0].delta[(n + 4) % 21], \
+        self.mpc_average[0].delta[(n + 5) % 21], self.mpc_average[0].delta[(n + 6) % 21], self.mpc_average[0].delta[(n + 7) % 21], self.mpc_average[0].delta[(n + 8) % 21], self.mpc_average[0].delta[(n + 9) % 21], \
+        self.mpc_average[0].delta[(n + 10) % 21], self.mpc_average[0].delta[(n + 11) % 21], self.mpc_average[0].delta[(n + 12) % 21], self.mpc_average[0].delta[(n + 13) % 21], self.mpc_average[0].delta[(n + 14) % 21], \
+        self.mpc_average[0].delta[(n + 15) % 21], self.mpc_average[0].delta[(n + 16) % 21], self.mpc_average[0].delta[(n + 17) % 21], self.mpc_average[0].delta[(n + 18) % 21], self.mpc_average[0].delta[(n + 19) % 21], self.mpc_average[0].delta[(n + 20) % 21], \
         self.accel_limit, float(restricted_steer_rate), float(driver_torque), self.angle_rate_desired, self.projected_angle_steers, float(angle_rate), \
         angle_steers, self.angle_steers_des, self.angle_steers_des_mpc, projected_angle_steers_des, self.observed_ratio, PL.PP.l_prob, PL.PP.r_prob, PL.PP.c_prob, PL.PP.p_prob, \
         self.l_poly[0], self.l_poly[1], self.l_poly[2], self.l_poly[3], self.r_poly[0], self.r_poly[1], self.r_poly[2], self.r_poly[3], \
@@ -266,4 +281,6 @@ class LatControl(object):
 
     self.sat_flag = self.pid.saturated
     self.prev_angle_rate = angle_rate
+    #self.cur_state[0].delta = math.radians(angle_steers - angle_offset) / CP.steerRatio
+    self.angle_steers_des_time = cur_time
     return output_steer, float(self.angle_steers_des)
