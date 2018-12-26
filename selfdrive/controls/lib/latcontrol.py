@@ -42,7 +42,7 @@ class LatControl(object):
     self.setup_mpc(CP.steerRateCost)
     self.smooth_factor = 2.0 * CP.steerActuatorDelay / _DT      # Multiplier for inductive component (feed forward)
     self.projection_factor = CP.steerActuatorDelay                       #  Mutiplier for reactive component (PI)
-    self.accel_limit = 2.0                                 # Desired acceleration limit to prevent "whip steer" (resistive component)
+    self.accel_limit = 5.0                                 # Desired acceleration limit to prevent "whip steer" (resistive component)
     self.ff_angle_factor = 0.5         # Kf multiplier for angle-based feed forward
     self.ff_rate_factor = 5.0         # Kf multiplier for rate-based feed forward
     self.ratioDelayExp = 2.0           # Exponential coefficient for variable steering rate (delay)
@@ -70,7 +70,9 @@ class LatControl(object):
     self.steerpub.bind("tcp://*:8594")
     self.influxString = 'steerData3,testName=none,active=%s,ff_type=%s ff_type_a=%s,ff_type_r=%s,steer_status=%s,' \
                     'steering_control_active=%s,steer_stock_torque=%s,steer_stock_torque_request=%s,d0=%s,d1=%s,d2=%s,' \
-                    'd3=%s,d4=%s,d5=%s,d6=%s,d7=%s,d8=%s,d9=%s,d10=%s,d11=%s,d12=%s,d13=%s,d14=%s,d15=%s,d16=%s,d17=%s,d18=%s,d19=%s,' \
+                    'd3=%s,d4=%s,d5=%s,d6=%s,d7=%s,d8=%s,d9=%s,d10=%s,d11=%s,d12=%s,d13=%s,d14=%s,d15=%s,d16=%s,d17=%s,d18=%s,d19=%s,d20=%s,' \
+                    'da0=%s,da1=%s,da2=%s,da3=%s,da4=%s,da5=%s,da6=%s,da7=%s,da8=%s,da9=%s,da10=%s,da11=%s,da12=%s,da13=%s,da14=%s,da15=%s,' \
+                    'da16=%s,da17=%s,da18=%s,da19=%s,da20=%s,' \
                     'accel_limit=%s,restricted_steer_rate=%s,driver_torque=%s,angle_rate_desired=%s,future_angle_steers=%s,' \
                     'angle_rate=%s,angle_steers=%s,angle_steers_des=%s,self.angle_steers_des_mpc=%s,projected_angle_steers_des=%s,steerRatio=%s,l_prob=%s,' \
                     'r_prob=%s,c_prob=%s,p_prob=%s,l_poly[0]=%s,l_poly[1]=%s,l_poly[2]=%s,l_poly[3]=%s,r_poly[0]=%s,r_poly[1]=%s,r_poly[2]=%s,r_poly[3]=%s,' \
@@ -88,6 +90,8 @@ class LatControl(object):
     self.libmpc.init(MPC_COST_LAT.PATH, MPC_COST_LAT.LANE, MPC_COST_LAT.HEADING, steer_rate_cost)
 
     self.mpc_solution = libmpc_py.ffi.new("log_t *")
+    self.mpc_average = libmpc_py.ffi.new("log_t *")
+    self.mpc_average_initialized = False
     self.cur_state = libmpc_py.ffi.new("state_t *")
     self.mpc_updated = False
     self.mpc_nans = False
@@ -106,6 +110,9 @@ class LatControl(object):
     # Use steering rate from the last 2 samples to estimate acceleration for a more realistic future steering rate
     accelerated_angle_rate = 2.0 * angle_rate - self.prev_angle_rate
 
+    # Determine project angle steers using current steer rate
+    self.projected_angle_steers = float(angle_steers) + self.projection_factor * float(accelerated_angle_rate)
+
     # TODO: this creates issues in replay when rewinding time: mpc won't run
     if self.last_mpc_ts < PL.last_md_ts:
       self.last_mpc_ts = PL.last_md_ts
@@ -122,9 +129,6 @@ class LatControl(object):
       plan_age = _DT_MPC + cur_time - float(self.last_mpc_ts / 1000000000.0)
       total_delay = ratioDelayFactor * CP.steerActuatorDelay + plan_age
 
-      # Project the future steering angle for the actuator delay only (not model delay)
-      self.projected_angle_steers = ratioDelayFactor * CP.steerActuatorDelay * accelerated_angle_rate + angle_steers
-
       self.l_poly = libmpc_py.ffi.new("double[4]", list(PL.PP.l_poly))
       self.r_poly = libmpc_py.ffi.new("double[4]", list(PL.PP.r_poly))
       self.p_poly = libmpc_py.ffi.new("double[4]", list(PL.PP.p_poly))
@@ -137,10 +141,19 @@ class LatControl(object):
                           self.l_poly, self.r_poly, self.p_poly,
                           PL.PP.l_prob, PL.PP.r_prob, PL.PP.p_prob, self.curvature_factor, v_ego_mpc, PL.PP.lane_width)
 
+      for i in range(0, 19):
+        if self.mpc_average_initialized:
+          self.mpc_average[0].delta[i] = (float(20 - i) * self.mpc_average[0].delta[i + 1] + self.mpc_solution[0].delta[i]) / float(21 - i)
+        else:
+          self.mpc_average[0].delta[i] = self.mpc_solution[0].delta[i]
+          self.mpc_average_initialized = True
+        self.mpc_average[0].delta[20] = self.mpc_solution[0].delta[20]
+
       # reset to current steer angle if not active or overriding
       if active:
         self.isActive = 1
         delta_desired = self.mpc_solution[0].delta[1]
+        #delta_desired = (self.mpc_solution[0].delta[1] + self.mpc_solution[0].delta[1]) / 2.0
         if self.cur_state[0].delta != 0.0:
           ratio = math.radians(angle_steers - angle_offset) / self.cur_state[0].delta
           if ratio > 0:
@@ -181,6 +194,8 @@ class LatControl(object):
       projected_angle_steers_des = 0.0
       projected_angle_steers = 0.0
       restricted_steer_rate = 0.0
+      self.mpc_average = libmpc_py.ffi.new("log_t *")
+      self.mpc_average_initialized = False
     else:
       # Interpolate desired angle between MPC updates
       self.angle_steers_des = self.angle_steers_des_prev + self.angle_rate_desired * (cur_time - self.angle_steers_des_time)
@@ -192,9 +207,6 @@ class LatControl(object):
 
       # Determine projected desired angle that is within the acceleration limit (prevent the steering wheel from jerking)
       projected_angle_steers_des = self.angle_steers_des + self.projection_factor * restricted_steer_rate
-
-      # Determine project angle steers using current steer rate
-      projected_angle_steers = float(angle_steers) + self.projection_factor * float(accelerated_angle_rate)
 
       steers_max = get_steer_max(CP, v_ego)
       self.pid.pos_limit = steers_max
@@ -219,8 +231,12 @@ class LatControl(object):
       deadzone = 0.0
 
       # Use projected desired and actual angles instead of "current" values, in order to make PI more reactive (for resonance)
-      output_steer = self.pid.update(projected_angle_steers_des, projected_angle_steers, check_saturation=(v_ego > 10), override=steer_override,
+      output_steer = self.pid.update(projected_angle_steers_des, self.projected_angle_steers, check_saturation=(v_ego > 10), override=steer_override,
                                      feedforward=self.feed_forward, speed=v_ego, deadzone=deadzone)
+
+      # Hide angle error if being overriden
+      if steer_override:
+        self.projected_angle_steers = self.angle_steers_des_mpc
 
       # All but the last 3 lines after here are for real-time dashboarding
       self.frames += 1
@@ -230,14 +246,18 @@ class LatControl(object):
       steer_stock_torque = 0.0
       steer_stock_torque_request = 0.0
 
-      if True == True or self.mpc_updated:
-        self.steerdata += ("%d,%s,%d,%d,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%d|" % (self.isActive, \
+      if True == False or self.mpc_updated:
+        self.steerdata += ("%d,%s,%d,%d,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%d|" % (self.isActive, \
         ff_type, 1 if ff_type == "a" else 0, 1 if ff_type == "r" else 0, steer_status, steering_control_active, steer_stock_torque, steer_stock_torque_request, \
         self.mpc_solution[0].delta[0], self.mpc_solution[0].delta[1], self.mpc_solution[0].delta[2], self.mpc_solution[0].delta[3], self.mpc_solution[0].delta[4], \
         self.mpc_solution[0].delta[5], self.mpc_solution[0].delta[6], self.mpc_solution[0].delta[7], self.mpc_solution[0].delta[8], self.mpc_solution[0].delta[9], \
         self.mpc_solution[0].delta[10], self.mpc_solution[0].delta[11], self.mpc_solution[0].delta[12], self.mpc_solution[0].delta[13], self.mpc_solution[0].delta[14], \
-        self.mpc_solution[0].delta[15], self.mpc_solution[0].delta[16], self.mpc_solution[0].delta[17], self.mpc_solution[0].delta[18], self.mpc_solution[0].delta[19], \
-        self.accel_limit, float(restricted_steer_rate), float(driver_torque), self.angle_rate_desired, projected_angle_steers, float(angle_rate), \
+        self.mpc_solution[0].delta[15], self.mpc_solution[0].delta[16], self.mpc_solution[0].delta[17], self.mpc_solution[0].delta[18], self.mpc_solution[0].delta[19], self.mpc_solution[0].delta[20], \
+        self.mpc_average[0].delta[0], self.mpc_average[0].delta[1], self.mpc_average[0].delta[2], self.mpc_average[0].delta[3], self.mpc_average[0].delta[4], \
+        self.mpc_average[0].delta[5], self.mpc_average[0].delta[6], self.mpc_average[0].delta[7], self.mpc_average[0].delta[8], self.mpc_average[0].delta[9], \
+        self.mpc_average[0].delta[10], self.mpc_average[0].delta[11], self.mpc_average[0].delta[12], self.mpc_average[0].delta[13], self.mpc_average[0].delta[14], \
+        self.mpc_average[0].delta[15], self.mpc_average[0].delta[16], self.mpc_average[0].delta[17], self.mpc_average[0].delta[18], self.mpc_average[0].delta[19], self.mpc_average[0].delta[20], \
+        self.accel_limit, float(restricted_steer_rate), float(driver_torque), self.angle_rate_desired, self.projected_angle_steers, float(angle_rate), \
         angle_steers, self.angle_steers_des, self.angle_steers_des_mpc, projected_angle_steers_des, self.observed_ratio, PL.PP.l_prob, PL.PP.r_prob, PL.PP.c_prob, PL.PP.p_prob, \
         self.l_poly[0], self.l_poly[1], self.l_poly[2], self.l_poly[3], self.r_poly[0], self.r_poly[1], self.r_poly[2], self.r_poly[3], \
         self.p_poly[0], self.p_poly[1], self.p_poly[2], self.p_poly[3], PL.PP.c_poly[0], PL.PP.c_poly[1], PL.PP.c_poly[2], PL.PP.c_poly[3], \
