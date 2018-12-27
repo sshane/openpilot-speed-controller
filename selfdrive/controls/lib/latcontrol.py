@@ -76,11 +76,8 @@ class LatControl(object):
     self.libmpc.init(MPC_COST_LAT.PATH, MPC_COST_LAT.LANE, MPC_COST_LAT.HEADING, steer_rate_cost)
 
     self.mpc_solution = libmpc_py.ffi.new("log_t *")
-    self.mpc_average = libmpc_py.ffi.new("log_t *")
-    self.mpc_average_initialized = False
     self.cur_state = libmpc_py.ffi.new("state_t *")
     self.mpc_angles = [0.0, 0.0, 0.0]
-    self.mpc_rates = [0.0, 0.0, 0.0]
     self.mpc_times = [0.0, 0.0, 0.0]
     self.mpc_updated = False
     self.mpc_nans = False
@@ -213,8 +210,8 @@ class LatControl(object):
       steer_stock_torque_request = 0.0
       self.angle_rate_desired = 0.0
       self.observed_ratio = 0.0
-
-      if self.mpc_updated:
+      capture_all = False
+      if self.mpc_updated or capture_all:
         self.frames += 1
         self.steerdata += ("%d,%s,%d,%d,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%d|" % (1, \
         ff_type, 1 if ff_type == "a" else 0, 1 if ff_type == "r" else 0, steer_status, steering_control_active, steer_stock_torque, steer_stock_torque_request, \
