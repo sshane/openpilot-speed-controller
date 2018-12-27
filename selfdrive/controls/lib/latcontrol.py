@@ -281,6 +281,6 @@ class LatControl(object):
 
     self.sat_flag = self.pid.saturated
     self.prev_angle_rate = angle_rate
-    #self.cur_state[0].delta = math.radians(angle_steers - angle_offset) / CP.steerRatio
+    self.cur_state[0].delta = math.radians(angle_steers - angle_offset) / CP.steerRatio
     self.angle_steers_des_time = cur_time
     return output_steer, float(self.angle_steers_des)
