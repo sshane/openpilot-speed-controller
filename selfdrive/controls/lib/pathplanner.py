@@ -24,19 +24,18 @@ class PathPlanner(object):
       l_poly = model_polyfit(md.model.leftLane.points, self._path_pinv)  # left line
       r_poly = model_polyfit(md.model.rightLane.points, self._path_pinv)  # right line
 
-      '''try:
+      try:
         if LaC is not None and LaC.angle_steers_des != 0.0:
           angle_error = LaC.angle_steers_des - (0.05 * LaC.avg_angle_steers + LaC.steerActuatorDelay * LaC.projected_angle_steers) / (LaC.steerActuatorDelay + 0.05)
         else:
           angle_error = 0.0
         if angle_error != 0.0:
-          lateral_error = 1.0 * np.clip(v_ego * (LaC.steerActuatorDelay + 0.05) * math.tan(math.radians(angle_error)), -0.5, 0.5)
+          lateral_error = 1.0 * np.clip(v_ego * (LaC.steerActuatorDelay + 0.05) * math.tan(math.radians(angle_error)), -0.2, 0.2)
           lateral_error = LaC.lateral_error
         else:
           lateral_error = 0.0
       except:
-      '''
-      lateral_error = 0.0
+        lateral_error = 0.0
 
       # only offset left and right lane lines; offsetting p_poly does not make sense
       l_poly[3] += CAMERA_OFFSET - lateral_error
