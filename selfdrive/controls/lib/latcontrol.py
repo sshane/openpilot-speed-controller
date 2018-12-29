@@ -210,7 +210,7 @@ class LatControl(object):
       steer_stock_torque_request = 0.0
       self.angle_rate_desired = 0.0
       self.observed_ratio = 0.0
-      capture_all = False
+      capture_all = True
       if self.mpc_updated or capture_all:
         self.frames += 1
         self.steerdata += ("%d,%s,%d,%d,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%d|" % (1, \
