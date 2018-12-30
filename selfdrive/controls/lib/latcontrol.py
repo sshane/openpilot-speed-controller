@@ -39,8 +39,8 @@ class LatControl(object):
     self.last_cloudlog_t = 0.0
     self.setup_mpc(CP.steerRateCost)
     self.smooth_factor = 2.0 * CP.steerActuatorDelay / _DT      # Multiplier for inductive component (feed forward)
-    self.projection_factor = CP.steerActuatorDelay / 2.0      #  Mutiplier for reactive component (PI)
-    self.accel_limit = 5.0                                 # Desired acceleration limit to prevent "whip steer" (resistive component)
+    self.projection_factor = 0.5 * CP.steerActuatorDelay      #  Mutiplier for reactive component (PI)
+    self.accel_limit = 2.0                                 # Desired acceleration limit to prevent "whip steer" (resistive component)
     self.ff_angle_factor = 0.5         # Kf multiplier for angle-based feed forward
     self.ff_rate_factor = 5.0         # Kf multiplier for rate-based feed forward
     self.prev_angle_rate = 0
@@ -92,18 +92,18 @@ class LatControl(object):
   def update(self, active, v_ego, angle_steers, angle_rate, steer_override, d_poly, angle_offset, CP, VM, PL):
     self.mpc_updated = False
 
-    # Use steering rate from the last 2 samples to estimate acceleration for a more realistic future steering rate
-    accelerated_angle_rate = 2.0 * angle_rate - self.prev_angle_rate
-
-    # Determine future angle steers using accelerated steer rate
-    self.projected_angle_steers = float(angle_steers) + self.projection_factor * float(accelerated_angle_rate)
-
     # TODO: this creates issues in replay when rewinding time: mpc won't run
     if self.last_mpc_ts < PL.last_md_ts:
       cur_time = sec_since_boot()
       self.last_mpc_ts = PL.last_md_ts
 
       self.curvature_factor = VM.curvature_factor(v_ego)
+
+      # Use steering rate from the last 2 samples to estimate acceleration for a more realistic future steering rate
+      accelerated_angle_rate = 2.0 * angle_rate - self.prev_angle_rate
+
+      # Determine future angle steers using accelerated steer rate
+      self.projected_angle_steers = float(angle_steers) + self.projection_factor * float(accelerated_angle_rate)
 
       # Determine a proper delay time that includes the model's processing time, which is variable
       plan_age = cur_time - float(self.last_mpc_ts / 1000000000.0)
@@ -166,10 +166,13 @@ class LatControl(object):
 
       # Determine the target steer rate for desired angle, but prevent the acceleration limit from being exceeded
       # Restricting the steer rate creates the resistive component needed for resonance
-      restricted_steer_rate = np.clip(self.angle_steers_des - float(angle_steers) , float(accelerated_angle_rate) - self.accel_limit, float(accelerated_angle_rate) + self.accel_limit)
+      restricted_steer_rate = np.clip(self.angle_steers_des - float(angle_steers) , float(angle_rate) - self.accel_limit, float(angle_rate) + self.accel_limit)
 
       # Determine projected desired angle that is within the acceleration limit (prevent the steering wheel from jerking)
       projected_angle_steers_des = self.angle_steers_des + self.projection_factor * restricted_steer_rate
+
+      # Determine future angle steers using steer rate
+      self.projected_angle_steers = float(angle_steers) + self.projection_factor * float(angle_rate)
 
       steers_max = get_steer_max(CP, v_ego)
       self.pid.pos_limit = steers_max
@@ -179,7 +182,7 @@ class LatControl(object):
         # Decide which feed forward mode should be used (angle or rate).  Use more dominant mode, and only if conditions are met
         # Spread feed forward out over a period of time to make it more inductive (for resonance)
         if abs(self.ff_rate_factor * float(restricted_steer_rate)) > abs(self.ff_angle_factor * float(self.angle_steers_des) - float(angle_offset)) - 0.5 \
-            and (abs(float(restricted_steer_rate)) > abs(accelerated_angle_rate) or (float(restricted_steer_rate) < 0) != (accelerated_angle_rate < 0)) \
+            and (abs(float(restricted_steer_rate)) > abs(angle_rate) or (float(restricted_steer_rate) < 0) != (angle_rate < 0)) \
             and (float(restricted_steer_rate) < 0) == (float(self.angle_steers_des) - float(angle_offset) - 0.5 < 0):
           ff_type = "r"
           self.feed_forward = (((self.smooth_factor - 1.) * self.feed_forward) + self.ff_rate_factor * v_ego**2 * float(restricted_steer_rate)) / self.smooth_factor
