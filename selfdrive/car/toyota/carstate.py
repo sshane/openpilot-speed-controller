@@ -97,6 +97,8 @@ class CarState(object):
                          C=np.matrix([1.0, 0.0]),
                          K=np.matrix([[0.12287673], [0.29666309]]))
     self.v_ego = 0.0
+    self.avg_angle_rate = 0.0
+    self.avg_steer_motor = 0.0
 
   def update(self, cp, cp_cam):
     # copy can_valid
@@ -133,8 +135,10 @@ class CarState(object):
     self.a_ego = float(v_ego_x[1])
     self.standstill = not self.v_wheel > 0.001
 
+    prev_angle_steers = self.angle_steers
     self.angle_steers = cp.vl["STEER_ANGLE_SENSOR"]['STEER_ANGLE'] + cp.vl["STEER_ANGLE_SENSOR"]['STEER_FRACTION']
-    self.angle_steers_rate = cp.vl["STEER_ANGLE_SENSOR"]['STEER_RATE']
+    self.avg_angle_rate = abs(49.0 * self.avg_angle_rate + 100.0 * (self.angle_steers - prev_angle_steers)) / 50.0
+
     can_gear = int(cp.vl["GEAR_PACKET"]['GEAR'])
     self.gear_shifter = parse_gear_shifter(can_gear, self.shifter_values)
     self.main_on = cp.vl["PCM_CRUISE_2"]['MAIN_ON']
@@ -148,6 +152,10 @@ class CarState(object):
     self.brake_error = 0
     self.steer_torque_driver = cp.vl["STEER_TORQUE_SENSOR"]['STEER_TORQUE_DRIVER']
     self.steer_torque_motor = cp.vl["STEER_TORQUE_SENSOR"]['STEER_TORQUE_EPS']
+    self.avg_steer_motor = abs(49.0 * self.avg_steer_motor + self.steer_torque_motor) / 50.0
+    if self.avg_steer_motor > 0:
+      self.angle_steers_rate = self.steer_torque_motor * self.avg_angle_rate / self.avg_steer_motor
+
     # we could use the override bit from dbc, but it's triggered at too high torque values
     self.steer_override = abs(self.steer_torque_driver) > STEER_THRESHOLD
 
