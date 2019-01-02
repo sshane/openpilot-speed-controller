@@ -137,7 +137,7 @@ class CarState(object):
 
     prev_angle_steers = self.angle_steers
     self.angle_steers = cp.vl["STEER_ANGLE_SENSOR"]['STEER_ANGLE'] + cp.vl["STEER_ANGLE_SENSOR"]['STEER_FRACTION']
-    self.angle_steers_rate = cp.vl["STEER_ANGLE_SENSOR"]['ANGLE_RATE']
+    self.angle_steers_rate = cp.vl["STEER_ANGLE_SENSOR"]['STEER_RATE']
 
     # calculate rough steer rate
     if self.angle_steers != prev_angle_steers:
