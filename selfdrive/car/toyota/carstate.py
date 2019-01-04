@@ -146,8 +146,9 @@ class CarState(object):
       self.steer_counter = 0.0
     self.steer_counter += 1.0
 
-    if self.angle_steers_rate == 0:
-      self.angle_steers_rate = self.rough_steers_rate
+    #if self.angle_steers_rate == 0:
+    #  self.angle_steers_rate = self.rough_steers_rate
+    self.angle_steers_rate = self.rough_steers_rate
 
     can_gear = int(cp.vl["GEAR_PACKET"]['GEAR'])
     self.gear_shifter = parse_gear_shifter(can_gear, self.shifter_values)
