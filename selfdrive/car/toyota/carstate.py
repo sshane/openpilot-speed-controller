@@ -100,9 +100,10 @@ class CarState(object):
     self.steer_counter = 1.0
     self.steer_counter_prev = 0.0
     self.angle_steers = 0.0
+    self.angle_steers_rate = 0.0
     self.rough_steers_rate = 0.0
-    self.rough_steers_rate_prev = 0.0
-    
+    self.rough_steers_rate_increment = 0.0
+
   def update(self, cp, cp_cam):
     # copy can_valid
     self.can_valid = cp.can_valid
@@ -143,18 +144,18 @@ class CarState(object):
     self.angle_steers_rate = cp.vl["STEER_ANGLE_SENSOR"]['STEER_RATE']
 
     if self.angle_steers != prev_angle_steers:
-      self.rough_steers_rate_prev = self.rough_steers_rate
+      rough_steers_rate_prev = self.angle_steers_rate
       self.steer_counter_prev = self.steer_counter
-      self.rough_steers_rate = 100.0 * (self.angle_steers - prev_angle_steers) / self.steer_counter
+      rough_steers_rate = 100.0 * (self.angle_steers - prev_angle_steers) / self.steer_counter_prev
+      self.rough_steers_rate_increment = (rough_steers_rate - rough_steers_rate_prev) / self.steer_counter_prev
       self.steer_counter = 0.0
     self.steer_counter += 1.0
 
-    if self.steer_counter == self.steer_counter_prev:
-      self.angle_steers_rate = self.rough_steers_rate
-    elif self.steer_counter > self.steer_counter_prev:
-      self.angle_steers_rate = (self.steer_counter_prev * self.rough_steers_rate) / (self.steer_counter + 1.0)
+    if self.steer_counter <= self.steer_counter_prev:
+      self.angle_steers_rate += self.rough_steers_rate_increment
     else:
-      self.angle_steers_rate = ((self.steer_counter_prev - self.steer_counter) * self.rough_steers_rate_prev + self.steer_counter * self.rough_steers_rate) / (self.steer_counter_prev)
+      self.angle_steers_rate = (self.steer_counter * self.angle_steers_rate) / (self.steer_counter + 1.0)
+
 
     can_gear = int(cp.vl["GEAR_PACKET"]['GEAR'])
     self.gear_shifter = parse_gear_shifter(can_gear, self.shifter_values)
