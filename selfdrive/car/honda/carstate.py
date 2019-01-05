@@ -159,6 +159,10 @@ class CarState(object):
 
     self.left_blinker_on = 0
     self.right_blinker_on = 0
+    self.steer_counter = 1.0
+    self.steer_counter_prev = 0.0
+    self.angle_steers = 0.0
+    self.rough_steers_rate = 0.0
 
     self.stopped = 0
 
@@ -240,12 +244,23 @@ class CarState(object):
       self.user_gas_pressed = self.user_gas > 0 # this works because interceptor read < 0 when pedal position is 0. Once calibrated, this will change
 
     self.gear = 0 if self.CP.carFingerprint == CAR.CIVIC else cp.vl["GEARBOX"]['GEAR']
+
+    prev_angle_steers = self.angle_steers
     if self.CP.carFingerprint in  (CAR.CIVIC, CAR.ODYSSEY, CAR.CRV_5G, CAR.ACCORD, CAR.ACCORD_15, CAR.ACCORDH, CAR.CIVIC_HATCH):
       self.angle_steers = cp.vl["STEERING_SENSORS"]['STEER_ANGLE'] + cp.vl["STEERING_SENSORS"]['STEER_ANGLE_OFFSET']
     else:
       self.angle_steers = cp.vl["STEERING_SENSORS"]['STEER_ANGLE']
 
     self.angle_steers_rate = cp.vl["STEERING_SENSORS"]['STEER_ANGLE_RATE']
+
+    if self.angle_steers != prev_angle_steers:
+      self.rough_steers_rate = 100.0 * (self.angle_steers - prev_angle_steers) / self.steer_counter
+      self.steer_counter_prev = self.steer_counter
+      self.steer_counter = 0.0
+    elif self.steer_counter > self.steer_counter_prev:
+      self.rough_steers_rate = (self.steer_counter_prev * self.rough_steers_rate) / (self.steer_counter + 1.0)
+    self.steer_counter += 1.0
+    self.angle_steers_rate = self.rough_steers_rate
 
     self.cruise_setting = cp.vl["SCM_BUTTONS"]['CRUISE_SETTING']
     self.cruise_buttons = cp.vl["SCM_BUTTONS"]['CRUISE_BUTTONS']
