@@ -163,6 +163,7 @@ class CarState(object):
     self.steer_counter_prev = 0.0
     self.angle_steers = 0.0
     self.rough_steers_rate = 0.0
+    self.rough_steers_rate_prev = 0.0
 
     self.stopped = 0
 
@@ -251,16 +252,21 @@ class CarState(object):
     else:
       self.angle_steers = cp.vl["STEERING_SENSORS"]['STEER_ANGLE']
 
-    self.angle_steers_rate = cp.vl["STEERING_SENSORS"]['STEER_ANGLE_RATE']
+    #self.angle_steers_rate = cp.vl["STEERING_SENSORS"]['STEER_ANGLE_RATE']
 
     if self.angle_steers != prev_angle_steers:
-      self.rough_steers_rate = 100.0 * (self.angle_steers - prev_angle_steers) / self.steer_counter
+      self.rough_steers_rate_prev = self.rough_steers_rate
       self.steer_counter_prev = self.steer_counter
+      self.rough_steers_rate = 100.0 * (self.angle_steers - prev_angle_steers) / self.steer_counter
       self.steer_counter = 0.0
-    elif self.steer_counter > self.steer_counter_prev:
-      self.rough_steers_rate = (self.steer_counter_prev * self.rough_steers_rate) / (self.steer_counter + 1.0)
     self.steer_counter += 1.0
-    self.angle_steers_rate = self.rough_steers_rate
+
+    if self.steer_counter == self.steer_counter_prev:
+      self.angle_steers_rate = self.rough_steers_rate
+    elif self.steer_counter > self.steer_counter_prev:
+      self.angle_steers_rate = (self.steer_counter_prev * self.rough_steers_rate) / (self.steer_counter + 1.0)
+    else:
+      self.angle_steers_rate = ((self.steer_counter_prev - self.steer_counter) * self.rough_steers_rate_prev + self.steer_counter * self.rough_steers_rate) / (self.steer_counter_prev)
 
     self.cruise_setting = cp.vl["SCM_BUTTONS"]['CRUISE_SETTING']
     self.cruise_buttons = cp.vl["SCM_BUTTONS"]['CRUISE_BUTTONS']
