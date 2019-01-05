@@ -98,6 +98,7 @@ class CarState(object):
                          K=np.matrix([[0.12287673], [0.29666309]]))
     self.v_ego = 0.0
     self.steer_counter = 1.0
+    self.steer_counter_prev = 0.0
     self.angle_steers = 0.0
     self.rough_steers_rate = 0.0
 
@@ -142,8 +143,11 @@ class CarState(object):
 
     # calculate rough steer rate
     if self.angle_steers != prev_angle_steers:
-      self.rough_steers_rate = (self.angle_steers - prev_angle_steers)*(100.0/self.steer_counter)
+      self.rough_steers_rate = 100.0 * (self.angle_steers - prev_angle_steers) / self.steer_counter
+      self.steer_counter_prev = self.steer_counter
       self.steer_counter = 0.0
+    elif self.steer_counter > self.steer_counter_prev:
+      self.rough_steers_rate = (self.steer_counter_prev * self.rough_steers_rate) / (self.steer_counter + 1.0)
     self.steer_counter += 1.0
 
     #if self.angle_steers_rate == 0:
