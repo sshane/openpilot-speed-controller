@@ -102,6 +102,9 @@ class CarState(object):
                          C=np.matrix([1.0, 0.0]),
                          K=np.matrix([[0.12287673], [0.29666309]]))
     self.v_ego = 0.0
+    self.steer_counter = 1.0
+    self.angle_steers = 0.0
+    self.rough_steers_rate = 0.0
 
   def update(self, cp, cp_cam):
     # copy can_valid
@@ -141,8 +144,20 @@ class CarState(object):
     self.a_ego = float(v_ego_x[1])
     self.standstill = not self.v_wheel > 0.001
 
+    prev_angle_steers = self.angle_steers
     self.angle_steers = cp.vl["STEER_ANGLE_SENSOR"]['STEER_ANGLE'] + cp.vl["STEER_ANGLE_SENSOR"]['STEER_FRACTION']
     self.angle_steers_rate = cp.vl["STEER_ANGLE_SENSOR"]['STEER_RATE']
+
+    # calculate rough steer rate
+    if self.angle_steers != prev_angle_steers:
+      self.rough_steers_rate = (self.angle_steers - prev_angle_steers)*(100.0/self.steer_counter)
+      self.steer_counter = 0.0
+    self.steer_counter += 1.0
+
+    #if self.angle_steers_rate == 0:
+    #  self.angle_steers_rate = self.rough_steers_rate
+    self.angle_steers_rate = self.rough_steers_rate
+
     can_gear = int(cp.vl["GEAR_PACKET"]['GEAR'])
     self.gear_shifter = parse_gear_shifter(can_gear, self.shifter_values)
     self.main_on = cp.vl["PCM_CRUISE_2"]['MAIN_ON']
