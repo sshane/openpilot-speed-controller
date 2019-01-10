@@ -240,11 +240,10 @@ class CarState(object):
       self.user_gas_pressed = self.user_gas > 0 # this works because interceptor read < 0 when pedal position is 0. Once calibrated, this will change
 
     self.gear = 0 if self.CP.carFingerprint == CAR.CIVIC else cp.vl["GEARBOX"]['GEAR']
-    if self.CP.carFingerprint in  (CAR.CIVIC, CAR.ODYSSEY, CAR.CRV_5G, CAR.ACCORD, CAR.ACCORD_15, CAR.ACCORDH, CAR.CIVIC_HATCH):
+    if self.CP.carFingerprint in HONDA_BOSCH:
       self.angle_steers = cp.vl["STEERING_SENSORS"]['STEER_ANGLE'] + cp.vl["STEERING_SENSORS"]['STEER_ANGLE_OFFSET']
     else:
       self.angle_steers = cp.vl["STEERING_SENSORS"]['STEER_ANGLE']
-    self.angle_steers_rate = cp.vl["STEERING_SENSORS"]['STEER_ANGLE_RATE']
 
     self.angle_steers_rate = cp.vl["STEERING_SENSORS"]['STEER_ANGLE_RATE']
     self.steer_rack = cp.vl["NEW_MSG_1"]["NEW_SIGNAL_1"]
