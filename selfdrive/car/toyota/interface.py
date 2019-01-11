@@ -84,7 +84,7 @@ class CarInterface(object):
       tire_stiffness_factor = 0.6371   # hand-tune
       ret.mass = 3045 * CV.LB_TO_KG + std_cargo
       ret.steerKpV, ret.steerKiV = [[0.4], [0.01]]
-      ret.steerKf = 0.00006   # full torque for 10 deg at 80mph means 0.00007818594
+      ret.steerKf = 0.00007818594   # full torque for 10 deg at 80mph means 0.00007818594
       # TODO: Prius seem to have very laggy actuators. Understand if it is lag or hysteresis
       ret.steerActuatorDelay = 0.25
 
@@ -96,7 +96,7 @@ class CarInterface(object):
       tire_stiffness_factor = 0.5533
       ret.mass = 3650 * CV.LB_TO_KG + std_cargo  # mean between normal and hybrid
       ret.steerKpV, ret.steerKiV = [[0.6], [0.05]]
-      ret.steerKf = 0.00006   # full torque for 10 deg at 80mph means 0.00007818594
+      ret.steerKf = 0.00007818594   # full torque for 10 deg at 80mph means 0.00007818594
 
     elif candidate == CAR.COROLLA:
       stop_and_go = False
@@ -116,7 +116,7 @@ class CarInterface(object):
       tire_stiffness_factor = 0.444  # not optimized yet
       ret.mass = 4481 * CV.LB_TO_KG + std_cargo  # mean between min and max
       ret.steerKpV, ret.steerKiV = [[0.6], [0.1]]
-      ret.steerKf = 0.00006   # full torque for 10 deg at 80mph means 0.00007818594
+      ret.steerKf = 0.00007818594   # full torque for 10 deg at 80mph means 0.00007818594
 
     elif candidate in [CAR.CHR, CAR.CHRH]:
       stop_and_go = True
@@ -126,7 +126,7 @@ class CarInterface(object):
       tire_stiffness_factor = 0.7933
       ret.mass = 3300. * CV.LB_TO_KG + std_cargo
       ret.steerKpV, ret.steerKiV = [[0.723], [0.0428]]
-      ret.steerKf = 0.00006
+      ret.steerKf = 0.00007818594
 
     elif candidate in [CAR.CAMRY, CAR.CAMRYH]:
       stop_and_go = True
@@ -146,7 +146,7 @@ class CarInterface(object):
       tire_stiffness_factor = 0.444 # not optimized yet
       ret.mass = 4607 * CV.LB_TO_KG + std_cargo #mean between normal and hybrid limited
       ret.steerKpV, ret.steerKiV = [[0.6], [0.05]]
-      ret.steerKf = 0.00006
+      ret.steerKf = 0.00007818594
 
     ret.steerRateCost = 1.
     ret.centerToFront = ret.wheelbase * 0.44
