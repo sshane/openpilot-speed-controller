@@ -102,6 +102,7 @@ class CarState(object):
                          C=np.matrix([1.0, 0.0]),
                          K=np.matrix([[0.12287673], [0.29666309]]))
     self.v_ego = 0.0
+	self.speed_limit_prev = 0
 
   def update(self, cp, cp_cam):
     # copy can_valid
@@ -159,8 +160,18 @@ class CarState(object):
     # we could use the override bit from dbc, but it's triggered at too high torque values
     self.steer_override = abs(self.steer_torque_driver) > STEER_THRESHOLD
 
+    live_speed_file = '/data/live_speed_file'
+
+    if cp.vl["PCM_CRUISE_2"]['SET_SPEED'] != self.speed_limit_prev:
+      self.speed_limit_prev = cp.vl["PCM_CRUISE_2"]['SET_SPEED']
+      self.v_cruise_pcm = cp.vl["PCM_CRUISE_2"]['SET_SPEED']
+      with open(live_speed_file, 'w') as f:
+        f.write(str(self.speed_limit_prev))
+    else:
+      speed = open(live_speed_file, "r")
+      self.v_cruise_pcm = float(speed.read())
+
     self.user_brake = 0
-    self.v_cruise_pcm = cp.vl["PCM_CRUISE_2"]['SET_SPEED']
     self.pcm_acc_status = cp.vl["PCM_CRUISE"]['CRUISE_STATE']
     self.pcm_acc_active = bool(cp.vl["PCM_CRUISE"]['CRUISE_ACTIVE'])
     self.gas_pressed = not cp.vl["PCM_CRUISE"]['GAS_RELEASED']
