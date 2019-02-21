@@ -102,7 +102,7 @@ class CarState(object):
                          C=np.matrix([1.0, 0.0]),
                          K=np.matrix([[0.12287673], [0.29666309]]))
     self.v_ego = 0.0
-	self.speed_limit_prev = 0
+    self.speed_limit_prev = 0
 
   def update(self, cp, cp_cam):
     # copy can_valid
