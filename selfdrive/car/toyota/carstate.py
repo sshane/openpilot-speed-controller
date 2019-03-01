@@ -171,8 +171,8 @@ class CarState(object):
       try:
         speed = open(live_speed_file, "r")
         self.v_cruise_pcm = float(speed.read())
-      except: #if file doesn't exist, do nothing
-        None
+      except: #if file doesn't exist
+        self.v_cruise_pcm = cp.vl["PCM_CRUISE_2"]['SET_SPEED']
 
     self.user_brake = 0
     self.pcm_acc_status = cp.vl["PCM_CRUISE"]['CRUISE_STATE']
