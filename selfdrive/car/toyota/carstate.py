@@ -168,8 +168,11 @@ class CarState(object):
       with open(live_speed_file, 'w') as f:
         f.write(str(self.speed_limit_prev))
     else:
-      speed = open(live_speed_file, "r")
-      self.v_cruise_pcm = float(speed.read())
+      try:
+        speed = open(live_speed_file, "r")
+        self.v_cruise_pcm = float(speed.read())
+      except: #if file doesn't exist, do nothing
+        None
 
     self.user_brake = 0
     self.pcm_acc_status = cp.vl["PCM_CRUISE"]['CRUISE_STATE']
